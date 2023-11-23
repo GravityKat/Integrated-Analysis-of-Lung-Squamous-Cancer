@@ -1,0 +1,11 @@
+---
+title: "BMEG 310 Final Project"
+author: "Mekail Khattak, Pengyun Zhang, Amelie Marshall"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+The Final Project
+```{r}
+
+```
