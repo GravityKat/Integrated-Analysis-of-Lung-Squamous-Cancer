@@ -1,0 +1,90 @@
+---
+title: "Lab 9"
+author: 'Group 24: Wendy Zhang, Amelie Marshall, Mekail Khattak'
+date: "2023-11-06"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
+  word_document: default
+---
+**Action 1:**
+Key findings for analysis:
+
+1. Lung squamous cell carcinoma (SQCC) is a common type of lung cancer responsible for around 400,000 deaths worldwide annually.
+
+2. A comprehensive analysis was conducted as part of The Cancer Genome Atlas (TCGA) project, profiling 178 lung SQCC samples to understand the genomic and epigenomic landscape of the disease.
+
+3. Lung SQCC is characterized by complex genomic alterations, with an average of 360 exonic mutations, 165 genomic rearrangements, and 323 copy number alterations per tumor.
+
+4. The average overall mutation rate of these cells is 8.1 mutations per megabase which is very high
+
+5. Statistically recurrent mutations were found in 11 genes, with TP53 mutations present in nearly all specimens. Loss-of-function mutations were identified in the HLA-A gene.
+
+6. Significantly altered pathways included NFE2L2 and KEAP1 (34%), squamous differentiation genes (44%), phosphatidylinositol-3-OH kinase pathway genes (47%), and CDKN2A (tumour supressor gene) and RB1 (inactivated in 72% of lung SQCC cases).
+
+7. EGFR and KRAS mutations, common in lung adenocarcinoma, are rare in lung SQCC, but alterations in FGFR kinase family genes are common in lung SQCC.
+
+8. The study identified potential therapeutic targets in lung SQCC, with up to 64% of cases showing somatic alterations in genes or pathways that can be targeted by existing FDA-approved drugs or those under clinical trials.
+
+
+Read in all three files:
+
+```{r}
+RNA_data <- read.csv("RNAseq_LUSC.csv")
+```
+
+```{r}
+data_clinical_patient <- read.csv("data_clinical_patient.txt", sep = '\t', header = TRUE, skip = 4) 
+#ski first 4 data that not relates to patient ID
+
+data_mutations <- read.csv("data_mutations.txt", sep = '\t', header = TRUE )
+
+```
+
+```{r}
+uni_pat_cli<-unique(data_clinical_patient$PATIENT_ID)
+uni_pat_mut<-unique(data_mutations$Tumor_Sample_Barcode)
+uni_pat_first12_mut<-substr(uni_pat_mut, start = 1, stop = 12)
+pat_RNA<-colnames(RNA_data[2:554]) # get all the patient id
+pat_RNA<-gsub("\\.", "-", pat_RNA) # change dot to dash
+pat_first12_RNA<- substr(pat_RNA, start = 1, stop = 12) # only first 12 characters
+unique_pat_rna<-unique(pat_first12_RNA) #find the unique patient in RNA dataset
+unique_pat<-intersect(uni_pat_cli,uni_pat_first12_mut)
+unique_pat<-intersect(unique_pat,unique_pat_rna)
+```
+
+**Action 2**
+
+Plot the age distribution of the cases in your study.
+
+```{r}
+index<-which(data_clinical_patient$PATIENT_ID==unique_pat)
+boxplot(data_clinical_patient$AGE[index])
+
+```
+
+**Action 3**
+
+Plot the number of non-synonymous mutations per case for your cohort
+
+```{r}
+# check the mutation type
+hugo_M <- as.data.frame(table(data_mutations$Hugo_Symbol))
+hugo_M_ordered <- hugo_M[order(-hugo_M$Freq),]
+var.class_M <- as.data.frame(table(data_mutations$Variant_Classification))
+```
+
+```{r}
+library(ggplot2)
+data_mutations$PATIENT_ID<-substr(data_mutations$Tumor_Sample_Barcode,start=1,stop=12)
+data_mutation_common<-subset(data_mutations,PATIENT_ID %in% unique_pat)
+non_syn<-subset(data_mutation_common,Variant_Classification != "Silent")
+sample.name<-as.data.frame(table(non_syn$Tumor_Sample_Barcode))
+sample.name.ordered<-sample.name[order(-sample.name$Freq),]
+ggplot(data=sample.name.ordered,aes(x=reorder(Var1,-Freq),y=Freq))+
+  geom_col()+
+  labs(x="Patient ID",y="Number of non-synonymous mutations")
+```
+
+
