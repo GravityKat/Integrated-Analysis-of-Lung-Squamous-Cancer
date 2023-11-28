@@ -1,0 +1,86 @@
+---
+title: "lab7"
+author: "Group24: Wendy Zhang,Amelie Marshall, Mekail Khattak"
+date: "2023-10-23"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+Read in all three files:
+
+```{r}
+RNA_data <- read.csv("RNAseq_LUSC.csv")
+```
+
+
+```{r}
+data_clinical_patient <- read.csv("data_clinical_patient.txt", sep = '\t', header = TRUE, skip = 4) 
+#ski first 4 data that not relates to patient ID
+
+data_mutations <- read.csv("data_mutations.txt", sep = '\t', header = TRUE )
+
+```
+
+**Q1**
+```{r}
+#Find the unique patient in clinical patient data
+uni_pat_cli<-unique(data_clinical_patient$PATIENT_ID)
+length(uni_pat_cli)
+```
+
+```{r}
+#Find unique patient in mutation data set
+uni_pat_mut<-unique(data_mutations$Tumor_Sample_Barcode)
+# Only keep the first 12 characters
+uni_pat_first12_mut<-substr(uni_pat_mut, start = 1, stop = 12)
+length(uni_pat_first12_mut)
+```
+
+```{r}
+pat_RNA<-colnames(RNA_data[2:554]) # get all the patient id
+pat_RNA<-gsub("\\.", "-", pat_RNA) # change dot to dash
+pat_first12_RNA<- substr(pat_RNA, start = 1, stop = 12) # only first 12 characters
+unique_pat_rna<-unique(pat_first12_RNA) #find the unique patient in RNA dataset
+length(unique_pat_rna)
+```
+
+**Q2**
+```{r}
+# Find unique patients in all three files
+unique_pat<-intersect(uni_pat_cli,uni_pat_first12_mut)
+unique_pat<-intersect(unique_pat,unique_pat_rna)
+length(unique_pat)
+```
+There are 466 unique patients in total.
+
+```{r}
+# age distribution
+index<-which(data_clinical_patient$PATIENT_ID==unique_pat)
+boxplot(data_clinical_patient$AGE[index])
+
+```
+```{r}
+hugo_M <- as.data.frame(table(data_mutations$Hugo_Symbol))
+hugo_M
+hugo_M_ordered <- hugo_M[order(-hugo_M$Freq),]
+hugo_M_ordered
+var.class_M <- as.data.frame(table(data_mutations$Variant_Classification))
+var.class_M
+```
+
+
+
+```{r}
+library(ggplot2)
+non_syn<-subset(data_mutations,Variant_Classification == "Missense_Mutation"|
+                  Variant_Classification == "Frame_Shift_Del"|
+                  Variant_Classification == "Frame_Shift_Ins"|
+                  Variant_Classification == "Nonstop_Mutation")
+sample.name<-as.data.frame(table(non_syn$Tumor_Sample_Barcode))
+sample.name.ordered<-sample.name[order(-sample.name$Freq),]
+ggplot(data=sample.name.ordered,aes(x=Var1,y=Freq))+
+  geom_col()
+```
+
