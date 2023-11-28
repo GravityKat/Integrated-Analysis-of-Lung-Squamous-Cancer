@@ -1,0 +1,45 @@
+---
+title: "BMEG 310 Final Project"
+author: "Mekail Khattak, Pengyun Zhang, Amelie Marshall"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+The Final Project
+
+```{r}
+setwd("C:\\Users\\mekai\\OneDrive\\Desktop\\BMEG 310 Files\\Final Project\\TCGA-LUSC")
+```
+
+```{r}
+#Plotting Distributions
+
+RNA_data <- read.csv("RNAseq_LUSC.csv")
+data_clinical_patient <- read.csv("data_clinical_patient.txt", sep = '\t', header = TRUE, skip = 4)
+#ski first 4 data that not relates to patient ID
+data_mutations <- read.csv("data_mutations.txt", sep = '\t', header = TRUE )
+```
+
+```{r}
+uni_pat_cli<-unique(data_clinical_patient$PATIENT_ID)
+uni_pat_mut<-unique(data_mutations$Tumor_Sample_Barcode)
+uni_pat_first12_mut<-substr(uni_pat_mut, start = 1, stop = 12)
+pat_RNA<-colnames(RNA_data[2:554]) # get all the patient id
+pat_RNA<-gsub("\\.", "-", pat_RNA) # change dot to dash
+pat_first12_RNA<- substr(pat_RNA, start = 1, stop = 12) # only first 12 characters
+unique_pat_rna<-unique(pat_first12_RNA) #find the unique patient in RNA dataset
+unique_pat<-intersect(uni_pat_cli,uni_pat_first12_mut)
+unique_pat<-intersect(unique_pat,unique_pat_rna)
+
+index<-which(data_clinical_patient$PATIENT_ID==unique_pat)
+
+boxplot(data_clinical_patient$AGE[index])
+barplot(table(data_clinical_patient$SEX), main="Distribution of Sexes", xlab="Sex", ylab="Frequency", col="skyblue")
+barplot(table(data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE), main="Distribution of Cancer Stages", xlab="Cancer Stages", ylab="Frequency", col="skyblue")
+barplot(table(data_clinical_patient$ETHNICITY), main="Distribution of Ethnicities", xlab="Ethnicity", ylab="Frequency", col="skyblue")
+barplot(table(data_clinical_patient$OS_STATUS), main="Distribution of Survival", xlab="Survival Status", ylab="Frequency", col="skyblue")
+
+```
+
+
+
