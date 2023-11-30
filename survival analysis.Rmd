@@ -19,12 +19,36 @@ data_mutations <- read.csv("data_mutations.txt", sep = '\t', header = TRUE )
 
 ```
 
-Find uique patient
+Based on the Oncoplot matrix, do survival analysis on two cluster
 
 ```{r}
 data_clinic_common<-subset(data_clinical_patient,PATIENT_ID %in% unique_pat)
 data_clinic_filtered <- data_clinic_common[data_clinic_common$SEX != "", ]
 data_clinic_filtered <- data_clinic_common[data_clinic_common$AJCC_PATHOLOGIC_TUMOR_STAGE != "", ]
+```
+
+Find the clustered patient:
+
+```{r}
+# Extract patient IDs for Cluster 1
+cluster_1_patients <- row.names(cluster)[cluster$`cutree(res$tree_col, k = 2)` == 1]
+
+#Get first 12 char
+cluster_1_pat<-substr(cluster_1_patients, start = 1, stop = 12)
+
+# Filter clinical data based on Cluster 1 patients
+data_clinic_filtered_1<- data_clinic_filtered[data_clinic_filtered$PATIENT_ID %in% cluster_1_pat, ]
+```
+
+```{r}
+# Extract patient IDs for Cluster 2
+cluster_2_patients <- row.names(cluster)[cluster$`cutree(res$tree_col, k = 2)` == 2]
+
+#Get first 12 char
+cluster_2_pat<-substr(cluster_2_patients, start = 1, stop = 12)
+
+# Filter clinical data based on Cluster 2 patients
+data_clinic_filtered_2<- data_clinic_filtered[data_clinic_filtered$PATIENT_ID %in% cluster_2_pat, ]
 ```
 
 Library needed:
@@ -37,9 +61,9 @@ library("survminer")
 ```{r}
 library("SummarizedExperiment")
 ```
-
+**CLUSTER 1**
 ```{r}
-colnames(data_clinic_common)
+colnames(data_clinic_filtered_1)
 ```
 ```{r}
 colnames(RNA_data)
@@ -47,19 +71,19 @@ colnames(RNA_data)
 
 
 
-
 Overall survival status
 ```{r}
 # Create a boolean variable for deceased
-data_clinic_filtered$deceased <- data_clinic_filtered$OS_STATUS == "1:DECEASED"
+data_clinic_filtered_1$deceased <- data_clinic_filtered_1$OS_STATUS == "1:DECEASED"
 
 # Create an overall survival variable
-data_clinic_filtered$overall_survival <- ifelse(data_clinic_filtered$deceased,
-                                                  data_clinic_filtered$OS_MONTHS,
-                                                  data_clinic_filtered$DAYS_LAST_FOLLOWUP)
+data_clinic_filtered_1$overall_survival <- ifelse(data_clinic_filtered_1$deceased,
+                                                  data_clinic_filtered_1$OS_MONTHS,
+                                                  data_clinic_filtered_1$DAYS_LAST_FOLLOWUP)
 
 # Create a survival object
-surv_os <- Surv(time = data_clinic_filtered$overall_survival, event = data_clinic_filtered$deceased)
+surv_os <- Surv(time = data_clinic_filtered_1$overall_survival, 
+                event = data_clinic_filtered_1$deceased)
 
 # Fit the Kaplan-Meier estimator for OS
 km_fit_os <- survfit(surv_os ~ 1)
@@ -74,14 +98,14 @@ plot(km_fit_os, main = "Kaplan-Meier Survival Curve", xlab = "Time (Months)", yl
 How does gender affect survival?
 
 ```{r}
-fit <- survfit(surv_os ~ SEX, data = data_clinic_filtered)
+fit1<- survfit(surv_os ~ SEX, data = data_clinic_filtered_1)
 
 # Print the fitted survival model
-print(fit)
+print(fit1)
 
 # Plot the Kaplan-Meier survival curve with risk table
 library(survminer)
-ggsurvplot(fit, data = data_clinic_filtered, pval = TRUE, risk.table = TRUE, risk.table.col = "strata", risk.table.height = 0.35)
+ggsurvplot(fit1, data = data_clinic_filtered_1, pval = TRUE, risk.table = TRUE, risk.table.col = "strata", risk.table.height = 0.35)
 ```
 
 The p-value is non-significant, so gender alone does not significantly sway prognosis.
@@ -90,29 +114,97 @@ The p-value is non-significant, so gender alone does not significantly sway prog
 How does tumor stage affect survival?
 ```{r}
 # Remove "A", "B", or "C" at the end of the tumor stage name
-data_clinic_filtered$tumor_stage <- gsub("[ABC]$", "", data_clinic_filtered$AJCC_PATHOLOGIC_TUMOR_STAGE)
+data_clinic_filtered_1$tumor_stage <- gsub("[ABC]$", "", data_clinic_filtered_1$AJCC_PATHOLOGIC_TUMOR_STAGE)
 
 # Remove those with stage "not reported"
-data_clinic_filtered$tumor_stage[data_clinic_filtered$AJCC_PATHOLOGIC_TUMOR_STAGE == ""] <- NA
+data_clinic_filtered_1$tumor_stage[data_clinic_filtered_1$AJCC_PATHOLOGIC_TUMOR_STAGE == ""] <- NA
 
 # Check the updated distribution of tumor stages
-table(data_clinic_filtered$tumor_stage)
+table(data_clinic_filtered_1$tumor_stage)
 
 ```
 
 ```{r}
 # Fit the Kaplan-Meier estimator by tumor stage
-fit2 = survfit(Surv(overall_survival, deceased) ~ tumor_stage, data=data_clinic_filtered)
+fit2 = survfit(Surv(overall_survival, deceased) ~ tumor_stage, data=data_clinic_filtered_1)
 
 # Extract the survival p-value
-pval2 <- surv_pvalue(fit2, data = data_clinic_filtered)$pval
+pval2 <- surv_pvalue(fit2, data = data_clinic_filtered_1)$pval
 print(pval2)
 
 # Plot the Kaplan-Meier survival curve with risk table
 library(survminer)
-ggsurvplot(fit2, data = data_clinic_filtered, pval = TRUE, risk.table = TRUE, risk.table.height = 0.35)
+ggsurvplot(fit2, data = data_clinic_filtered_1, pval = TRUE, risk.table = TRUE, risk.table.height = 0.35)
 ```
 The p-value is significant, so different tumor stages does significantly sway prognosis.
 
-If we set significance level alpha to 0.05, then this p-value of 0.011 is less than 0.05, so we are rejecting the null hypothesis.
+If we set significance level alpha to 0.05, then this p-value of 0.039 is less than 0.05, so we are rejecting the null hypothesis.
 The rejection of the null hypothesis indicates that there is evidence in the data to suggest that the survival curves for different tumor stages are different. Therefore, statistically there is association between tumor stage and survival.
+
+
+
+
+**CLUSTER 2**
+
+```{r}
+# Create a boolean variable for deceased
+data_clinic_filtered_2$deceased <- data_clinic_filtered_2$OS_STATUS == "1:DECEASED"
+
+# Create an overall survival variable
+data_clinic_filtered_2$overall_survival <- ifelse(data_clinic_filtered_2$deceased,
+                                                  data_clinic_filtered_2$OS_MONTHS,
+                                                  data_clinic_filtered_2$DAYS_LAST_FOLLOWUP)
+
+# Create a survival object
+surv_os_2 <- Surv(time = data_clinic_filtered_2$overall_survival, 
+                event = data_clinic_filtered_2$deceased)
+
+# Fit the Kaplan-Meier estimator for OS
+km_fit_os_2 <- survfit(surv_os_2 ~ 1)
+
+plot(km_fit_os_2, main = "Kaplan-Meier Survival Curve", xlab = "Time (Months)", ylab = "Survival Probability - OS", col = 1)
+
+```
+
+How gender affect?
+
+```{r}
+fit3 <- survfit(surv_os_2 ~ SEX, data = data_clinic_filtered_2)
+
+# Print the fitted survival model
+print(fit3)
+
+# Plot the Kaplan-Meier survival curve with risk table
+library(survminer)
+ggsurvplot(fit3, data = data_clinic_filtered_2, pval = TRUE, risk.table = TRUE, risk.table.col = "strata", risk.table.height = 0.35)
+```
+The p-value is non-significant, so gender alone does not significantly sway prognosis.
+
+
+How does tumor stage affect survival?
+```{r}
+# Remove "A", "B", or "C" at the end of the tumor stage name
+data_clinic_filtered_2$tumor_stage <- gsub("[ABC]$", "", data_clinic_filtered_2$AJCC_PATHOLOGIC_TUMOR_STAGE)
+
+# Remove those with stage "not reported"
+data_clinic_filtered_2$tumor_stage[data_clinic_filtered_2$AJCC_PATHOLOGIC_TUMOR_STAGE == ""] <- NA
+
+# Check the updated distribution of tumor stages
+table(data_clinic_filtered_2$tumor_stage)
+
+```
+
+
+```{r}
+# Fit the Kaplan-Meier estimator by tumor stage
+fit4 = survfit(Surv(overall_survival, deceased) ~ tumor_stage, data=data_clinic_filtered_2)
+
+# Extract the survival p-value
+pval4 <- surv_pvalue(fit4, data = data_clinic_filtered_2)$pval
+print(pval4)
+
+# Plot the Kaplan-Meier survival curve with risk table
+library(survminer)
+ggsurvplot(fit4, data = data_clinic_filtered_2, pval = TRUE, risk.table = TRUE, risk.table.height = 0.35)
+```
+
