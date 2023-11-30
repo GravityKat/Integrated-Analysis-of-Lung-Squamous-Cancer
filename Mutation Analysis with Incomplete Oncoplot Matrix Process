@@ -1,0 +1,102 @@
+---
+title: "Mutation Analysis Overall"
+author: "Mekail Khattak"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r}
+library(ggplot2)
+library(pheatmap)
+library(reshape2)
+```
+
+```{r}
+setwd("C:\\Users\\mekai\\OneDrive\\Desktop\\BMEG 310 Files\\Final Project\\TCGA-LUSC")
+```
+
+```{r}
+mutations_data <- read.csv("data_mutations.txt", sep = '\t', header = TRUE )
+```
+
+```{r}
+hugo <- as.data.frame(table(mutations_data$Hugo_Symbol))
+
+var.class <- as.data.frame(table(mutations_data$Variant_Classification))
+
+ggplot(data=var.class, aes(x=Var1, y=Freq))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45,hjust=1))
+```
+```{r}
+var.class2 <- as.data.frame(table(mutations_data$VARIANT_CLASS))
+ggplot(data=var.class2, aes(x=Var1, y=Freq))+
+  geom_col(aes(fill=Var1))
+```
+```{r}
+var.type <- as.data.frame(table(mutations_data$Variant_Type))
+ggplot(data=var.type, aes(x=Var1, y=Freq))+
+  geom_col( aes(fill=Var1))
+```
+```{r}
+sample.name <- as.data.frame(table(mutations_data$Tumor_Sample_Barcode))
+hugo <- as.data.frame(table(mutations_data$Hugo_Symbol))
+
+hugo.ordered <- hugo[order(-hugo$Freq),]
+ggplot(data=hugo.ordered[1:15,], aes(x=Var1, y=Freq))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45,hjust=1))+
+  scale_x_discrete(limits = hugo.ordered[1:15,]$Var1)
+```
+#Generate Oncoplot Matrix
+```{r}
+cnv_events = unique(mutations_data$Variant_Classification)
+oncomat = reshape2::dcast(
+  data = mutations_data,
+  formula = Hugo_Symbol ~ Tumor_Sample_Barcode,
+  fun.aggregate = function(x, cnv = cnv_events) {
+    x = as.character(x) # >= 2 same/distinct variant classification = Multi_Hit
+    xad = x[x %in% cnv]
+    xvc = x[!x %in% cnv]
+    
+    if (length(xvc) > 0) {
+      xvc = ifelse(test = length(xvc) > 1,
+                   yes = 'Multi_Hit',
+                   no = xvc)
+    }
+    
+    x = ifelse(
+      test = length(xad) > 0,
+      yes = paste(xad, xvc, sep = ';'),
+      no = xvc
+    )
+    x = gsub(pattern = ';$',
+             replacement = '',
+             x = x)
+    x = gsub(pattern = '^;',
+             replacement = '',
+             x = x)
+    return(x)
+  },
+  value.var = 'Variant_Classification',
+  fill = '',
+  drop = FALSE
+)
+
+rownames(oncomat) = oncomat$Hugo_Symbol
+oncomat <- oncomat[,-1]
+```
+
+```{r}
+oncomat.ordered <- oncomat[order(-hugo$Freq),]
+```
+
+#Transform Matrix to Binary Matrix
+```{r}
+mat <- oncomat.ordered
+mat[mat!=""]=1
+mat[mat==""]=0
+mat <- apply(mat, 2 ,as.numeric)
+mat <- as.matrix(mat)
+rownames(mat)  <-  row.names(oncomat.ordered)
+```
