@@ -49,3 +49,37 @@ barplot(table(data_clinical_patient$ETHNICITY[index]), main="Distribution of Eth
 barplot(table(data_clinical_patient$OS_STATUS[index]), main="Distribution of Survival", xlab="Survival Status", ylab="Frequency", col="skyblue")
 
 ```
+
+
+CODE FOR ONCOPLOT AND MUTATION SUMMARY
+```{r}
+BiocManager::install("maftools")
+```
+
+```{r}
+library(maftools)
+```
+
+```{r}
+#path to mutation data file
+laml.maf = '/Users/ameliemarshall/Desktop/data_mutations.txt' 
+
+laml = read.maf(maf = laml.maf)
+
+#Shows sample summary.
+getSampleSummary(laml)
+#Shows gene summary.
+getGeneSummary(laml)
+#shows clinical data associated with samples
+getClinicalData(laml)
+#Shows all fields in MAF
+getFields(laml)
+#Writes maf summary to an output file with basename laml.
+write.mafSummary(maf = laml, basename = 'laml')
+
+#plotting MAF summary
+plotmafSummary(maf = laml, rmOutlier = TRUE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+
+#print oncoplot for top ten mutated genes.
+oncoplot(maf = laml, top = 10, draw_titv = TRUE)
+```
