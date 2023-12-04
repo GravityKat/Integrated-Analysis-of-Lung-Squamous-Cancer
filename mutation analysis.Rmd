@@ -91,7 +91,7 @@ rownames(mat)  <-  row.names(oncomat.ordered)
 ```
 
 ```{r}
-reduce.mat <- mat[1:3,]
+reduce.mat <- mat[1:15,]
 res <- pheatmap(reduce.mat,
          cluster_rows = F,
          show_colnames=FALSE)
