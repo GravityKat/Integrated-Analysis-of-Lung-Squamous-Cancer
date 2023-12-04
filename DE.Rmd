@@ -1,0 +1,107 @@
+---
+title: "DE"
+author: "Wendy Zhang"
+date: "2023-12-03"
+output: html_document
+---
+```{r}
+countData=read.csv("RNAseq_LUSC.csv")
+```
+
+
+```{r}
+library(stringr)
+# Assuming RNA_data is your data frame
+colnames(countData) <- str_sub(str_replace_all(colnames(countData), "\\.", "-"), 1, 12)
+```
+
+```{r}
+colData<-cluster
+rownames(colData)<-str_sub(row.names(colData),1,12)
+head(colData)
+```
+
+```{r}
+# Assuming countData is your data frame
+rownames(countData) <- countData[, 1]
+
+# Remove the first column from countData
+countData <- countData[, -1]
+
+countData <- countData[rowSums(countData)>1,]
+
+head(countData)
+
+```
+
+```{r}
+# Extract common column names
+common_cols <- intersect(colnames(countData), rownames(colData))
+common_cols<- intersect(common_cols,unique_pat)
+
+# Subset countData to keep only common columns
+countData<- countData[, common_cols]
+
+# Display the filtered countData
+head(countData)
+
+```
+```{r}
+# Assuming desired_order is already defined
+desired_order <- colnames(countData)
+
+# Reorder rows in colData based on desired_order
+colData <- colData[desired_order, , drop = FALSE]
+
+colData
+```
+
+
+
+```{r}
+library(DESeq2)
+```
+
+```{r}
+# Get the cluster assignments for the common samples
+cluster_labels <-colData$`cutree(res$tree_col, k = 2)`
+
+# Add cluster_labels to colData
+colData$cluster_group <- factor(cluster_labels)
+
+head(colData)
+```
+```{r}
+
+head(colData)
+head(countData)
+```
+```{r}
+colData<-colData[,-1]
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~ cluster_group)
+
+dds
+```
+```{r}
+dds = DESeq(dds)
+res <- results(dds)
+res
+```
+
+
+
+```{r}
+gene_symbols <- rownames(countData)
+gene_symbols_mutations <- data_mutation_common$Hugo_Symbol
+
+cluster_labels <-cluster$`cutree(res$tree_col, k = 2)`
+enrich_result_cluster <- enrichPathway(gene = cluster_labels, organism = "human")
+
+# Visualize enrichment results
+dotplot(enrich_result_cluster)
+
+```
+
