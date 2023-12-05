@@ -1,0 +1,514 @@
+---
+title: "310 Project Full Code"
+author: "Amelie Marshall, Mekail Khattak, Wendy Zhang"
+date: "2023-12-04"
+output: html_document
+---
+
+**Setting up data**
+```{r}
+#read data
+RNA_data <- read.csv("/Users/ameliemarshall/Desktop/RNAseq_LUSC.csv")
+data_clinical_patient <- read.csv("/Users/ameliemarshall/Desktop/data_clinical_patient.txt", sep = '\t', header = TRUE, skip = 4)
+#skip first 4 data that not relates to patient ID
+data_mutations <- read.csv("/Users/ameliemarshall/Desktop/data_mutations.txt", sep = '\t', header = TRUE )
+```
+
+**Distribution plots**
+#used clinical patient data to visualize distribution plots for each of the variables (age, sex, cancer stage, ethnicity, and survival)
+```{r}
+#find unique patients in each of the three datasets
+uni_pat_cli<-unique(data_clinical_patient$PATIENT_ID)
+uni_pat_mut<-unique(data_mutations$Tumor_Sample_Barcode)
+uni_pat_first12_mut<-substr(uni_pat_mut, start = 1, stop = 12)
+pat_RNA<-colnames(RNA_data[2:554]) # get all the patient ids
+pat_RNA<-gsub("\\.", "-", pat_RNA) # change dot to dash
+pat_first12_RNA<- substr(pat_RNA, start = 1, stop = 12) # only first 12 characters
+unique_pat_rna<-unique(pat_first12_RNA) #find the unique patient in RNA dataset
+#find unique patients common to all three datasets
+unique_pat<-intersect(uni_pat_cli,uni_pat_first12_mut)
+unique_pat<-intersect(unique_pat,unique_pat_rna)
+
+#create index
+index<-which(data_clinical_patient$PATIENT_ID %in% unique_pat)
+
+#filter "Sex" data to remove blank entries
+data_clinical_patient[which(data_clinical_patient$SEX == ""), "SEX"] = NA
+
+#filter the "Tumour Stage" data
+#remove any of the letters "a", "b" or "c", but only if they are at the end of the name, eg "stage iiia" would become simply "stage iii"
+data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE =  gsub("[ABC]$", "", data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE)
+#remove those with blank entries, since they are unknown
+data_clinical_patient[which(data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE == ""), "AJCC_PATHOLOGIC_TUMOR_STAGE"] = NA
+#finally, also remove those with tumor stage 4, since they are too few
+data_clinical_patient[which(data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE == "STAGE IV"), "AJCC_PATHOLOGIC_TUMOR_STAGE"] = NA
+
+#filter the "Ethnicity" data to remove blank entries
+data_clinical_patient[which(data_clinical_patient$ETHNICITY == ""), "ETHNICITY"] = NA
+
+#create boxplot for age distribution
+boxplot(data_clinical_patient$AGE[index])
+#create barplots to visualize other variable data
+barplot(table(data_clinical_patient$SEX[index]), main="Distribution of Sexes", xlab="Sex", ylab="Frequency", col="skyblue")
+barplot(table(data_clinical_patient$AJCC_PATHOLOGIC_TUMOR_STAGE[index]), main="Distribution of Cancer Stages", xlab="Cancer Stages", ylab="Frequency", col="skyblue")
+barplot(table(data_clinical_patient$ETHNICITY[index]), main="Distribution of Ethnicities", xlab="Ethnicity", ylab="Frequency", col="skyblue")
+barplot(table(data_clinical_patient$OS_STATUS[index]), main="Distribution of Survival", xlab="Survival Status", ylab="Frequency", col="skyblue")
+```
+
+**Mutation summaries**
+#use mutation data to visualize MAF summary
+```{r}
+# BiocManager::install("maftools")
+
+#required library
+library(maftools)
+
+#get maf data from data_mutations
+laml = read.maf(maf = data_mutations)
+
+#show summaries
+getSampleSummary(laml) # show sample summary
+getGeneSummary(laml) # show gene summary
+getClinicalData(laml) # show clinical data associated with samples
+getFields(laml) #show all fields in MAF
+
+#write maf summary to an output file with basename laml.
+write.mafSummary(maf = laml, basename = 'laml')
+
+#plot mutation (MAF) summary
+plotmafSummary(maf = laml, rmOutlier = TRUE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+```
+
+**Oncoplot**
+#use mutation data to create oncoplot
+```{r}
+#create oncoplot for top ten mutated genes.
+oncoplot(maf = laml, top = 10, draw_titv = TRUE) #use laml file from mutation summaries section
+```
+
+**Pheatmap**
+#create heat map of top 10 must frequently mutated genes
+```{r}
+#required libraries
+library(ggplot2)
+library(pheatmap)
+
+#print column names in data_mutations
+colnames(data_mutations)
+
+#create table with "Hugo_Symbol" data
+hugo <- as.data.frame(table(data_mutations$Hugo_Symbol))
+
+#generate oncoplot matrix
+cnv_events = unique(data_mutations$Variant_Classification)
+oncomat = reshape2::dcast(
+  data = data_mutations,
+  formula = Hugo_Symbol ~ Tumor_Sample_Barcode,
+  fun.aggregate = function(x, cnv = cnv_events) {
+    x = as.character(x) # >= 2 same/distinct variant classification = Multi_Hit
+    xad = x[x %in% cnv]
+    xvc = x[!x %in% cnv]
+    
+    if (length(xvc) > 0) {
+      xvc = ifelse(test = length(xvc) > 1,
+                   yes = 'Multi_Hit',
+                   no = xvc)
+    }
+    
+    x = ifelse(
+      test = length(xad) > 0,
+      yes = paste(xad, xvc, sep = ';'),
+      no = xvc
+    )
+    x = gsub(pattern = ';$',
+             replacement = '',
+             x = x)
+    x = gsub(pattern = '^;',
+             replacement = '',
+             x = x)
+    return(x)
+  },
+  value.var = 'Variant_Classification',
+  fill = '',
+  drop = FALSE
+)
+
+#modify row label to reflect "Hugo_Symbol" (gene name)
+rownames(oncomat) = oncomat$Hugo_Symbol
+oncomat <- oncomat[,-1]
+
+#render rows according to occurence of heavily mutated genes
+oncomat.ordered <- oncomat[order(-hugo$Freq),]
+
+#transform oncomat matrix into binary matrix
+mat <- oncomat.ordered
+mat[mat!=""]=1
+mat[mat==""]=0
+mat <- apply(mat, 2 ,as.numeric)
+mat <- as.matrix(mat)
+rownames(mat)  <-  row.names(oncomat.ordered)
+
+#draw heatmap for top 10 frequently mutated genes
+reduce.mat <- mat[1:3,]
+res <- pheatmap(reduce.mat,
+         cluster_rows = F,
+         show_colnames=FALSE)
+```
+
+**MAF Summary (repeats some of mutation summaries graphs)**
+#additional mutation summaries
+```{r}
+#variant classification summary
+var.class <- as.data.frame(table(data_mutations$Variant_Classification))
+ggplot(data=var.class, aes(x=Var1, y=Freq))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45,hjust=1))
+
+#grouped variant classification summary
+var.class2 <- as.data.frame(table(data_mutation_common$VARIANT_CLASS))
+ggplot(data=var.class2, aes(x=Var1, y=Freq))+
+  geom_col(aes(fill=Var1))
+
+#variant type summary
+var.type <- as.data.frame(table(data_mutation_common$Variant_Type))
+ggplot(data=var.type, aes(x=Var1, y=Freq))+
+  geom_col( aes(fill=Var1))
+```
+
+**Classifying patients**
+#visualize top 10 most frequently mutated genes using mutation data, and cluster patients into two groups: "wild" and "mutant"
+```{r}
+#identify most highly mutated genes 
+sample.name <- as.data.frame(table(data_mutations$Tumor_Sample_Barcode))
+
+hugo <- as.data.frame(table(data_mutations$Hugo_Symbol))
+
+hugo.ordered <- hugo[order(-hugo$Freq),]
+ggplot(data=hugo.ordered[1:10,], aes(x=Var1, y=Freq))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45,hjust=1))+
+  scale_x_discrete(limits = hugo.ordered[1:10,]$Var1)
+
+#cluster patients into two groups
+cluster <-  as.data.frame(cutree(res$tree_col, k = 2)) #use oncoplot matrix
+cluster
+```
+**Survival analysis**
+#perform a survival analysis on the two clusters of patients, creating Kaplan-Meier plots for each variable to find patterns
+```{r}
+#skip first 4 data that are not related to patient ID
+data_clinical_patient <- read.csv("/Users/ameliemarshall/Desktop/data_clinical_patient.txt", sep = '\t', header = TRUE, skip = 4) 
+
+#based on the oncoplot matrix, do survival analysis on two clusters
+data_clinic_common<-subset(data_clinical_patient,PATIENT_ID %in% unique_pat)
+data_clinic_filtered <- data_clinic_common[data_clinic_common$SEX != "", ]
+data_clinic_filtered <- data_clinic_common[data_clinic_common$AJCC_PATHOLOGIC_TUMOR_STAGE != "", ]
+
+#find the clustered patients
+
+#extract patient IDs for Cluster 1
+cluster_1_patients <- row.names(cluster)[cluster$`cutree(res$tree_col, k = 2)` == 1] 
+cluster_1_pat<-substr(cluster_1_patients, start = 1, stop = 12) # get first 12 char
+data_clinic_filtered_1<- data_clinic_filtered[data_clinic_filtered$PATIENT_ID %in% cluster_1_pat, ] #filter clinical data based on Cluster 1 patients
+
+#extract patient IDs for Cluster 2
+cluster_2_patients <- row.names(cluster)[cluster$`cutree(res$tree_col, k = 2)` == 2]
+cluster_2_pat<-substr(cluster_2_patients, start = 1, stop = 12) # get first 12 char
+data_clinic_filtered_2<- data_clinic_filtered[data_clinic_filtered$PATIENT_ID %in% cluster_2_pat, ] # filter clinical data based on Cluster 2 patients
+
+#required libraries
+library("TCGAbiolinks")
+library("survival")
+library("survminer")
+
+library("SummarizedExperiment")
+
+#CLUSTER 1
+colnames(data_clinic_filtered_1)
+colnames(RNA_data)
+
+# overall survival status
+# create a boolean variable for deceased
+data_clinic_filtered_1$deceased <- data_clinic_filtered_1$OS_STATUS == "1:DECEASED"
+
+# create an overall survival variable
+data_clinic_filtered_1$overall_survival <- ifelse(data_clinic_filtered_1$deceased,
+                                                  data_clinic_filtered_1$OS_MONTHS,
+                                                  data_clinic_filtered_1$DAYS_LAST_FOLLOWUP)
+
+# create a survival object
+surv_os <- Surv(time = data_clinic_filtered_1$overall_survival, 
+                event = data_clinic_filtered_1$deceased)
+
+# fit the Kaplan-Meier estimator for OS
+km_fit_os <- survfit(surv_os ~ 1)
+
+plot(km_fit_os, main = "Kaplan-Meier Survival Curve", xlab = "Time (Months)", ylab = "Survival Probability - OS", col = 1)
+
+# A: How does gender affect survival?
+fit1<- survfit(surv_os ~ SEX, data = data_clinic_filtered_1)
+
+# print the fitted survival model
+print(fit1)
+
+# plot the Kaplan-Meier survival curve with risk table
+library(survminer)
+ggsurvplot(fit1, data = data_clinic_filtered_1, pval = TRUE, risk.table = TRUE, risk.table.col = "strata", risk.table.height = 0.35)
+#The p-value is non-significant, so gender alone does not significantly sway prognosis.
+
+# B: How does tumor stage affect survival?
+# remove "A", "B", or "C" at the end of the tumor stage name
+data_clinic_filtered_1$tumor_stage <- gsub("[ABC]$", "", data_clinic_filtered_1$AJCC_PATHOLOGIC_TUMOR_STAGE)
+
+# remove those with stage "not reported"
+data_clinic_filtered_1$tumor_stage[data_clinic_filtered_1$AJCC_PATHOLOGIC_TUMOR_STAGE == ""] <- NA
+
+# check the updated distribution of tumor stages
+table(data_clinic_filtered_1$tumor_stage)
+
+# fit the Kaplan-Meier estimator by tumor stage
+fit2 = survfit(Surv(overall_survival, deceased) ~ tumor_stage, data=data_clinic_filtered_1)
+
+# extract the survival p-value
+pval2 <- surv_pvalue(fit2, data = data_clinic_filtered_1)$pval
+print(pval2)
+
+# plot the Kaplan-Meier survival curve with risk table
+library(survminer)
+ggsurvplot(fit2, data = data_clinic_filtered_1, pval = TRUE, risk.table = TRUE, risk.table.height = 0.35)
+#The p-value is significant, so different tumor stages does significantly sway prognosis.
+
+#If we set significance level alpha to 0.05, then this p-value of 0.039 is less than 0.05, so we are rejecting the null hypothesis. 
+#The rejection of the null hypothesis indicates that there is evidence in the data to suggest that the survival curves for different tumor stages are different. Therefore, statistically there is association between tumor stage and survival.
+
+#CLUSTER 2
+
+# overall survival status
+# create a boolean variable for deceased
+data_clinic_filtered_2$deceased <- data_clinic_filtered_2$OS_STATUS == "1:DECEASED"
+
+# create an overall survival variable
+data_clinic_filtered_2$overall_survival <- ifelse(data_clinic_filtered_2$deceased,
+                                                  data_clinic_filtered_2$OS_MONTHS,
+                                                  data_clinic_filtered_2$DAYS_LAST_FOLLOWUP)
+
+# create a survival object
+surv_os_2 <- Surv(time = data_clinic_filtered_2$overall_survival, 
+                event = data_clinic_filtered_2$deceased)
+
+# fit the Kaplan-Meier estimator for OS
+km_fit_os_2 <- survfit(surv_os_2 ~ 1)
+
+plot(km_fit_os_2, main = "Kaplan-Meier Survival Curve", xlab = "Time (Months)", ylab = "Survival Probability - OS", col = 1)
+
+# A: How gender affect?
+
+fit3 <- survfit(surv_os_2 ~ SEX, data = data_clinic_filtered_2)
+
+# print the fitted survival model
+print(fit3)
+
+# plot the Kaplan-Meier survival curve with risk table
+library(survminer)
+ggsurvplot(fit3, data = data_clinic_filtered_2, pval = TRUE, risk.table = TRUE, risk.table.col = "strata", risk.table.height = 0.35)
+#The p-value is non-significant, so gender alone does not significantly sway prognosis.
+
+# B: How does tumor stage affect survival?
+# remove "A", "B", or "C" at the end of the tumor stage name
+data_clinic_filtered_2$tumor_stage <- gsub("[ABC]$", "", data_clinic_filtered_2$AJCC_PATHOLOGIC_TUMOR_STAGE)
+
+# remove those with stage "not reported"
+data_clinic_filtered_2$tumor_stage[data_clinic_filtered_2$AJCC_PATHOLOGIC_TUMOR_STAGE == ""] <- NA
+
+# check the updated distribution of tumor stages
+table(data_clinic_filtered_2$tumor_stage)
+
+# fit the Kaplan-Meier estimator by tumor stage
+fit4 = survfit(Surv(overall_survival, deceased) ~ tumor_stage, data=data_clinic_filtered_2)
+
+# extract the survival p-value
+pval4 <- surv_pvalue(fit4, data = data_clinic_filtered_2)$pval
+print(pval4)
+
+# plot the Kaplan-Meier survival curve with risk table
+library(survminer)
+ggsurvplot(fit4, data = data_clinic_filtered_2, pval = TRUE, risk.table = TRUE, risk.table.height = 0.35)
+```
+
+**DE Analysis**
+```{r}
+countData=read.csv("/Users/ameliemarshall/Desktop/RNAseq_LUSC.csv")
+
+library(stringr)
+# assuming RNA_data is data frame
+colnames(countData) <- str_sub(str_replace_all(colnames(countData), "\\.", "-"), 1, 12)
+
+colData<-cluster
+rownames(colData)<-str_sub(row.names(colData),1,12)
+head(colData)
+
+# assuming countData is your data frame
+rownames(countData) <- countData[, 1]
+
+# remove the first column from countData
+countData <- countData[, -1]
+
+countData <- countData[rowSums(countData)>1,]
+
+head(countData)
+
+# extract common column names
+common_cols <- intersect(colnames(countData), rownames(colData))
+common_cols<- intersect(common_cols,unique_pat)
+
+# subset countData to keep only common columns
+countData<- countData[, common_cols]
+
+# display the filtered countData
+head(countData)
+
+# assuming desired_order is already defined
+desired_order <- colnames(countData)
+
+# reorder rows in colData based on desired_order
+colData <- colData[desired_order, , drop = FALSE]
+
+colData
+
+library(DESeq2)
+
+# get the cluster assignments for the common samples
+cluster_labels <-colData$`cutree(res$tree_col, k = 2)`
+
+# add cluster_labels to colData
+colData$cluster_group <- factor(cluster_labels)
+
+head(colData)
+
+head(colData)
+head(countData)
+
+
+dds <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~ cluster_group)
+
+dds
+
+dds = DESeq(dds)
+res <- results(dds)
+res
+
+summary(res)
+
+# res summaries with alpha
+res.05 <- results(dds, alpha = 0.05)
+table(res.05$padj < 0.05)
+
+resLFC1 <- results(dds, lfcThreshold=1)
+table(resLFC1$padj < 0.1)
+
+res <- res[order(res$pvalue),]
+summary(res)
+
+sum(res$padj < 0.06, na.rm=TRUE)
+
+head(resSig[ order( resSig$log2FoldChange, decreasing=TRUE), ])
+
+res = results(dds, contrast=c("cluster_group", "1", "2"))
+
+gene_symbols <- rownames(countData)
+gene_symbols_mutations <- data_mutation_common$Hugo_Symbol
+
+cluster_labels <-cluster$`cutree(res$tree_col, k = 2)`
+enrich_result_cluster <- enrichPathway(gene = cluster_labels, organism = "human")
+
+# visualize enrichment results
+dotplot(enrich_result_cluster)
+
+plotMA(res, ylim=c(-2,2))
+
+plotCounts(dds, gene=which.min(res$padj), intgroup="cluster_group")
+
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+
+columns(org.Hs.eg.db)
+
+# the Ensembl gene ID "ENSG00000000003.15"
+#Gene ID: ENSG00000000003, Version: 15
+# Remove version from Ensembl gene IDs in row names
+rownames(res) <- sub("\\.\\d+$", "", rownames(res))
+
+res$symbol = mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    column="SYMBOL",
+                    keytype="ENSEMBL",
+                    multiVals="first")
+
+# assuming your Ensembl gene IDs are stored in a vector like this:
+ensembl_ids <- c("ENSG00000121410", "ENSG00000175899", "ENSG00000291190")
+
+# map Ensemble IDs to gene symbols
+gene_symbols <- mapIds(org.Hs.eg.db,
+                       keys = ensembl_ids,
+                       column = "SYMBOL",
+                       keytype = "ENSEMBL",
+                       multiVals = "first")
+
+# Print the result
+print(gene_symbols)
+
+res$entrez = mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    column="ENTREZID",
+                    keytype="ENSEMBL",
+                    multiVals="first")
+
+res$name =   mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    column="GENENAME",
+                    keytype="ENSEMBL",
+                    multiVals="first")
+
+head(res, 10)
+
+library(pathview)
+library(gage)
+
+library(gageData)
+
+data(kegg.sets.hs)
+data(sigmet.idx.hs)
+
+# focus on signaling and metabolic pathways only
+kegg.sets.hs = kegg.sets.hs[sigmet.idx.hs]
+
+# examine the first 3 pathways
+head(kegg.sets.hs, 3)
+
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+
+library(gage)
+# get the results
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+
+attributes(keggres)
+
+# look at the first few down (less) pathways
+head(keggres$less)
+
+pathview(gene.data=foldchanges, pathway.id="hsa04110")
+
+## focus on top 5 upregulated pathways here for demo purposes only
+keggrespathways <- rownames(keggres$greater)[1:5]
+
+# Extract the 8 character long IDs part of each string
+keggresids = substr(keggrespathways, start=1, stop=8)
+keggresids
+
+# pathview(gene.data=foldchanges, pathway.id=keggresids, species="hsa")
+```
+
+
+
