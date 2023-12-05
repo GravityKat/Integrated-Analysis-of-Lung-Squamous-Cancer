@@ -90,7 +90,14 @@ dds = DESeq(dds)
 res <- results(dds)
 res
 ```
+```{r}
+summary(res)
+```
 
+
+```{r}
+res = results(dds, contrast=c("cluster_group", "1", "2"))
+```
 
 
 ```{r}
@@ -104,4 +111,126 @@ enrich_result_cluster <- enrichPathway(gene = cluster_labels, organism = "human"
 dotplot(enrich_result_cluster)
 
 ```
+
+
+```{r}
+plotMA(res, ylim=c(-2,2))
+```
+```{r}
+plotCounts(dds, gene=which.min(res$padj), intgroup="cluster_group")
+```
+
+```{r}
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+```
+
+```{r}
+columns(org.Hs.eg.db)
+```
+
+```{r}
+# the Ensembl gene ID "ENSG00000000003.15"
+#Gene ID: ENSG00000000003, Version: 15
+# Remove version from Ensembl gene IDs in row names
+rownames(res) <- sub("\\.\\d+$", "", rownames(res))
+
+res$symbol = mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    column="SYMBOL",
+                    keytype="ENSEMBL",
+                    multiVals="first")
+```
+
+```{r}
+# Assuming your Ensembl gene IDs are stored in a vector like this:
+ensembl_ids <- c("ENSG00000121410", "ENSG00000175899", "ENSG00000291190")
+
+# Map Ensembl IDs to gene symbols
+gene_symbols <- mapIds(org.Hs.eg.db,
+                       keys = ensembl_ids,
+                       column = "SYMBOL",
+                       keytype = "ENSEMBL",
+                       multiVals = "first")
+
+# Print the result
+print(gene_symbols)
+
+```
+
+
+```{r}
+res$entrez = mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    column="ENTREZID",
+                    keytype="ENSEMBL",
+                    multiVals="first")
+```
+```{r}
+res$name =   mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    column="GENENAME",
+                    keytype="ENSEMBL",
+                    multiVals="first")
+```
+
+```{r}
+head(res, 10)
+```
+
+
+```{r}
+library(pathview)
+library(gage)
+```
+```{r}
+library(gageData)
+
+data(kegg.sets.hs)
+data(sigmet.idx.hs)
+
+# Focus on signaling and metabolic pathways only
+kegg.sets.hs = kegg.sets.hs[sigmet.idx.hs]
+
+# Examine the first 3 pathways
+head(kegg.sets.hs, 3)
+```
+```{r}
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+```
+```{r}
+library(gage)
+# Get the results
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+```
+
+```{r}
+attributes(keggres)
+```
+
+
+```{r}
+# Look at the first few down (less) pathways
+head(keggres$less)
+```
+
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa04110")
+```
+```{r}
+## Focus on top 5 upregulated pathways here for demo purposes only
+keggrespathways <- rownames(keggres$greater)[1:5]
+
+# Extract the 8 character long IDs part of each string
+keggresids = substr(keggrespathways, start=1, stop=8)
+keggresids
+```
+```{r}
+# pathview(gene.data=foldchanges, pathway.id=keggresids, species="hsa")
+```
+
+
+
 
