@@ -94,6 +94,25 @@ res
 summary(res)
 ```
 
+#The stuff with alpha idk
+```{r}
+res.05 <- results(dds, alpha = 0.05)
+table(res.05$padj < 0.05)
+```
+```{r}
+resLFC1 <- results(dds, lfcThreshold=1)
+table(resLFC1$padj < 0.1)
+```
+```{r}
+res <- res[order(res$pvalue),]
+summary(res)
+```
+```{r}
+sum(res$padj < 0.06, na.rm=TRUE)
+```
+```{r}
+head(resSig[ order( resSig$log2FoldChange, decreasing=TRUE), ])
+```
 
 ```{r}
 res = results(dds, contrast=c("cluster_group", "1", "2"))
