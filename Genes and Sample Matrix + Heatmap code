@@ -1,0 +1,41 @@
+```{r}
+#head(resSig[ order( resSig$log2FoldChange, decreasing=TRUE), ])
+TopGenes <- order(resSig$log2FoldChange, decreasing =TRUE)[1:10]
+downGenes <- order(resSig$log2FoldChange, decreasing =FALSE)[1:10]
+all.genes <- c(TopGenes, downGenes)
+
+all.genes
+```
+```{r}
+countDataSigGenes <- countData[all.genes,]
+```
+
+```{r}
+# this gives log2(n + 1)
+ntd <- normTransform(dds)
+# Variance stabilizing transformation
+vsd <- vst(dds)
+```
+
+
+```{r}
+# we can select a subset of genes to plot.let’s choose the 20 genes with the largest positive log2fold change.
+# genes <- order(res$log2FoldChange,decreasing = TRUE)[1:20]
+
+# or largest negative log2fold change
+# genes <- order(res$log2FoldChange, decreasing = FALSE)[1:20]
+
+# or we can select the top 20 significant genes
+#genes <- order(res$padj,decreasing = TRUE)[1:20]
+
+annot_col = data.frame(colData$cluster_group)
+row.names(annot_col) <- rownames(colData)
+
+sampleMatrix <- assay(vsd)[all.genes,]
+
+rownames(sampleMatrix) = rownames(countData[all.genes,])
+colnames(sampleMatrix) = colnames(countData)
+
+pheatmap(sampleMatrix , cluster_rows=FALSE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=annot_col, show_colnames = FALSE)
+```
